@@ -21,6 +21,13 @@ Repositório do serviço de IA do sistema Camarão. Processa imagens e vídeos u
 
 O serviço opera **desacoplado**: o backend publica no SQS e a IA consome de forma assíncrona, permitindo escalabilidade e resiliência.
 
+## Skills do repositório
+
+| Skill | Descrição |
+|-------|-----------|
+| [tdd-workflow](../.cursor/skills/tdd-workflow/SKILL.md) | Ciclo RED-GREEN-REFACTOR, testes de comportamento |
+| [testing-patterns](../.cursor/skills/testing-patterns/SKILL.md) | Unit, integração, mocking, AAA |
+
 ## Fluxo no Sistema
 
 1. Backend publica mensagem no SQS
