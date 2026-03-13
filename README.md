@@ -27,6 +27,7 @@ O serviço opera **desacoplado**: o backend publica no SQS e a IA consome de for
 |-------|-----------|
 | [tdd-workflow](../.cursor/skills/tdd-workflow/SKILL.md) | Ciclo RED-GREEN-REFACTOR, testes de comportamento |
 | [testing-patterns](../.cursor/skills/testing-patterns/SKILL.md) | Unit, integração, mocking, AAA |
+| [python-patterns](../.cursor/skills/python-patterns/SKILL.md) | Padrões Python (quando o serviço for implementado em Python) |
 
 ## Fluxo no Sistema
 
