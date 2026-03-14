@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ShrimpScan – Análise Inteligente de Camarões</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0a1628;--card:#0f2040;--card2:#162850;--accent:#00e5a0;--accent2:#00b4ff;--warn:#ffb300;--danger:#ff4444}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:#e2f0ff;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;margin:0}
+  .glass{background:rgba(15,32,64,.85);backdrop-filter:blur(12px);border:1px solid rgba(0,229,160,.15);border-radius:16px}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:10px;font-weight:600;font-size:.9rem;cursor:pointer;transition:all .2s;border:none;outline:none}
+  .btn-accent{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a1628}
+  .btn-accent:hover{opacity:.85;transform:translateY(-1px)}
+  .btn-ghost{background:rgba(0,229,160,.1);color:var(--accent);border:1px solid rgba(0,229,160,.3)}
+  .btn-ghost:hover{background:rgba(0,229,160,.2)}
+  .btn-danger{background:rgba(255,68,68,.15);color:var(--danger);border:1px solid rgba(255,68,68,.3)}
+  .drop-zone{border:2px dashed rgba(0,229,160,.35);border-radius:14px;padding:40px;text-align:center;transition:all .25s;cursor:pointer}
+  .drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:rgba(0,229,160,.06)}
+  .tab-btn{padding:10px 18px;border-radius:10px;font-weight:600;font-size:.9rem;cursor:pointer;transition:all .2s;background:transparent;border:none;color:#7a9abf}
+  .tab-btn.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a1628}
+  .metric-card{background:var(--card2);border-radius:12px;padding:16px;border:1px solid rgba(0,229,160,.1);text-align:center}
+  .score-circle{width:90px;height:90px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;margin:0 auto 8px}
+  .alert-badge{display:inline-block;background:rgba(255,68,68,.18);color:var(--danger);border:1px solid rgba(255,68,68,.3);border-radius:20px;padding:3px 12px;font-size:.78rem;margin:2px}
+  .ok-badge{display:inline-block;background:rgba(0,229,160,.12);color:var(--accent);border:1px solid rgba(0,229,160,.25);border-radius:20px;padding:3px 12px;font-size:.78rem;margin:2px}
+  .warn-badge{display:inline-block;background:rgba(255,179,0,.12);color:var(--warn);border:1px solid rgba(255,179,0,.25);border-radius:20px;padding:3px 12px;font-size:.78rem;margin:2px}
+  .spinner{width:36px;height:36px;border:4px solid rgba(0,229,160,.2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .sidebar-link{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;cursor:pointer;transition:all .2s;color:#7a9abf;font-size:.9rem}
+  .sidebar-link:hover,.sidebar-link.active{background:rgba(0,229,160,.1);color:var(--accent)}
+  .sidebar-link svg{width:20px;height:20px;flex-shrink:0}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0a1628}::-webkit-scrollbar-thumb{background:#1e3a60;border-radius:3px}
+  .progress-bar{height:8px;border-radius:4px;background:rgba(0,229,160,.15);overflow:hidden}
+  .progress-fill{height:100%;border-radius:4px;transition:width .6s;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  #status-bar{transition:all .4s}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th{text-align:left;padding:8px 12px;color:#7a9abf;border-bottom:1px solid rgba(255,255,255,.06)}
+  td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04)}
+  tr:hover td{background:rgba(0,229,160,.04)}
+</style>
+</head>
+<body class="flex">
+
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════════════ -->
+<aside style="width:220px;min-height:100vh;background:#0b1c3a;border-right:1px solid rgba(0,229,160,.1);padding:24px 12px;display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+  <div style="text-align:center;margin-bottom:28px">
+    <div style="font-size:1.8rem;margin-bottom:4px">🦐</div>
+    <div style="font-size:1.1rem;font-weight:800;color:var(--accent)">ShrimpScan</div>
+    <div style="font-size:.7rem;color:#4a7a9b">v2.0 · OpenCV</div>
+  </div>
+  <div id="nav-links">
+    <div class="sidebar-link active" onclick="showPage('dashboard')" id="nav-dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="sidebar-link" onclick="showPage('morphometry')" id="nav-morphometry">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/><circle cx="8" cy="12" r="2" fill="currentColor"/></svg>
+      Morfometria
+    </div>
+    <div class="sidebar-link" onclick="showPage('larvae')" id="nav-larvae">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="8" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="6" cy="16" r="2"/><circle cx="18" cy="16" r="2"/></svg>
+      Larvas / PL
+    </div>
+    <div class="sidebar-link" onclick="showPage('motility')" id="nav-motility">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12s2-6 7-6 7 6 7 6-2 6-7 6-7-6-7-6z"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+      Motilidade
+    </div>
+    <div class="sidebar-link" onclick="showPage('health')" id="nav-health">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-8-5.5-8-11a8 8 0 0116 0c0 5.5-8 11-8 11z"/></svg>
+      Saúde
+    </div>
+    <div class="sidebar-link" onclick="showPage('history')" id="nav-history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      Histórico
+    </div>
+    <div class="sidebar-link" onclick="showPage('calibration')" id="nav-calibration">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18M5 5l14 14M19 5L5 19"/></svg>
+      Calibração
+    </div>
+    <div class="sidebar-link" onclick="showPage('reports')" id="nav-reports">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Laudos PDF
+    </div>
+  </div>
+  <div style="margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)">
+    <div id="cv-status" style="font-size:.72rem;color:#4a7a9b;padding:8px">Carregando status...</div>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;font-size:.8rem" onclick="exportCSV()">⬇ Exportar CSV</button>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══════════════════════════════════════════════════════════════════ -->
+<main style="flex:1;padding:28px;overflow-y:auto;min-height:100vh">
+
+  <!-- STATUS BAR -->
+  <div id="status-bar" style="display:none" class="glass" style="margin-bottom:16px;padding:12px 20px;display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div class="spinner" id="status-spinner"></div>
+    <span id="status-text">Processando...</span>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div id="page-dashboard" class="page-content">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">🦐 Dashboard</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Resumo das análises realizadas</p>
+    <div id="dash-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px">
+      <div class="glass" style="padding:20px">
+        <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:12px">Análises por tipo</div>
+        <canvas id="chart-types" height="200"></canvas>
+      </div>
+      <div class="glass" style="padding:20px">
+        <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:12px">Últimos 7 dias</div>
+        <canvas id="chart-days" height="200"></canvas>
+      </div>
+    </div>
+    <div class="glass" style="padding:20px">
+      <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:12px">Análises recentes</div>
+      <div id="dash-recent"></div>
+    </div>
+  </div>
+
+  <!-- ── MORFOMETRIA ── -->
+  <div id="page-morphometry" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">📏 Morfometria por Imagem</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Medição automática de comprimento, largura, área e peso estimado por regressão alométrica.</p>
+    <div class="glass" style="padding:24px;margin-bottom:20px">
+      <div class="drop-zone" id="drop-morphometry" onclick="document.getElementById('inp-morphometry').click()">
+        <div style="font-size:2.5rem;margin-bottom:8px">🖼️</div>
+        <div style="font-size:1rem;font-weight:600">Arraste uma imagem ou clique para selecionar</div>
+        <div style="font-size:.8rem;color:#4a7a9b;margin-top:4px">JPG, PNG, WEBP – até 20 MB</div>
+        <input type="file" id="inp-morphometry" accept="image/*" style="display:none" onchange="runMorphometry(this)"/>
+      </div>
+    </div>
+    <div id="res-morphometry"></div>
+  </div>
+
+  <!-- ── LARVAS ── -->
+  <div id="page-larvae" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">🔬 Análise de Larvas / PL</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Contagem, tamanho médio, uniformidade, estágio larval e qualidade do lote.</p>
+    <div class="glass" style="padding:24px;margin-bottom:20px">
+      <div class="drop-zone" id="drop-larvae" onclick="document.getElementById('inp-larvae').click()">
+        <div style="font-size:2.5rem;margin-bottom:8px">🔬</div>
+        <div style="font-size:1rem;font-weight:600">Arraste imagem microscópica ou clique</div>
+        <div style="font-size:.8rem;color:#4a7a9b;margin-top:4px">JPG, PNG, WEBP</div>
+        <input type="file" id="inp-larvae" accept="image/*" style="display:none" onchange="runLarvae(this)"/>
+      </div>
+    </div>
+    <div id="res-larvae"></div>
+  </div>
+
+  <!-- ── MOTILIDADE ── -->
+  <div id="page-motility" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">🎬 Motilidade por Vídeo</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Análise do fluxo óptico (Farneback) para calcular índice de atividade natatória.</p>
+    <div class="glass" style="padding:24px;margin-bottom:20px">
+      <div class="drop-zone" id="drop-motility" onclick="document.getElementById('inp-motility').click()">
+        <div style="font-size:2.5rem;margin-bottom:8px">🎥</div>
+        <div style="font-size:1rem;font-weight:600">Arraste um vídeo ou clique para selecionar</div>
+        <div style="font-size:.8rem;color:#4a7a9b;margin-top:4px">MP4, AVI, MOV, WEBM – até 100 MB</div>
+        <input type="file" id="inp-motility" accept="video/*" style="display:none" onchange="runMotility(this)"/>
+      </div>
+    </div>
+    <div id="res-motility"></div>
+  </div>
+
+  <!-- ── SAÚDE ── -->
+  <div id="page-health" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">❤️ Avaliação de Saúde</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Análise de coloração HSV e textura para detecção de sinais de WSSV, Black Gill, Vibriose e necrose.</p>
+    <div class="glass" style="padding:24px;margin-bottom:20px">
+      <div class="drop-zone" id="drop-health" onclick="document.getElementById('inp-health').click()">
+        <div style="font-size:2.5rem;margin-bottom:8px">🩺</div>
+        <div style="font-size:1rem;font-weight:600">Arraste uma imagem ou clique</div>
+        <div style="font-size:.8rem;color:#4a7a9b;margin-top:4px">JPG, PNG, WEBP</div>
+        <input type="file" id="inp-health" accept="image/*" style="display:none" onchange="runHealth(this)"/>
+      </div>
+    </div>
+    <div id="res-health"></div>
+  </div>
+
+  <!-- ── CALIBRAÇÃO ── -->
+  <div id="page-calibration" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">📐 Calibração de Escala</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Defina a escala px/cm real usando uma moeda, régua ou dois pontos na imagem.</p>
+
+    <!-- Seletor de referência -->
+    <div class="glass" style="padding:24px;margin-bottom:16px">
+      <div style="font-size:.95rem;font-weight:600;margin-bottom:14px">🪙 Referência de calibração</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <select id="cal-ref-type" style="background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.25);border-radius:8px;padding:8px 14px;font-size:.88rem;flex:1">
+          <option value="R$0,05">Moeda R$0,05 – 17mm</option>
+          <option value="R$0,10">Moeda R$0,10 – 20mm</option>
+          <option value="R$0,25" selected>Moeda R$0,25 – 25mm ✦</option>
+          <option value="R$0,50">Moeda R$0,50 – 23mm</option>
+          <option value="R$1,00">Moeda R$1,00 – 27mm</option>
+          <option value="R$2,00">Moeda R$2,00 – 28mm</option>
+          <option value="régua_1cm">Régua – 1cm</option>
+          <option value="régua_5cm">Régua – 5cm</option>
+          <option value="custom">Personalizado (mm)</option>
+        </select>
+        <input type="number" id="cal-custom-mm" placeholder="mm personalizado" min="1" max="500"
+          style="background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.25);border-radius:8px;padding:8px 14px;font-size:.88rem;width:160px;display:none"/>
+      </div>
+      <div class="drop-zone" id="drop-calibration" onclick="document.getElementById('inp-calibration').click()">
+        <div style="font-size:2.5rem;margin-bottom:8px">📐</div>
+        <div style="font-size:1rem;font-weight:600">Arraste imagem com objeto de referência</div>
+        <div style="font-size:.8rem;color:#4a7a9b;margin-top:4px">A moeda/régua deve estar visível na imagem</div>
+        <input type="file" id="inp-calibration" accept="image/*" style="display:none" onchange="runCalibration(this)"/>
+      </div>
+    </div>
+
+    <!-- Calibração manual (2 pontos) -->
+    <div class="glass" style="padding:20px;margin-bottom:16px">
+      <div style="font-size:.9rem;font-weight:600;margin-bottom:10px">✏️ Calibração manual (2 pontos)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px">
+        <div><label style="font-size:.75rem;color:#4a7a9b">Ponto 1 X</label><input type="number" id="cal-x1" placeholder="px" style="width:100%;background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.2);border-radius:6px;padding:6px 10px;font-size:.85rem"/></div>
+        <div><label style="font-size:.75rem;color:#4a7a9b">Ponto 1 Y</label><input type="number" id="cal-y1" placeholder="px" style="width:100%;background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.2);border-radius:6px;padding:6px 10px;font-size:.85rem"/></div>
+        <div><label style="font-size:.75rem;color:#4a7a9b">Ponto 2 X</label><input type="number" id="cal-x2" placeholder="px" style="width:100%;background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.2);border-radius:6px;padding:6px 10px;font-size:.85rem"/></div>
+        <div><label style="font-size:.75rem;color:#4a7a9b">Ponto 2 Y</label><input type="number" id="cal-y2" placeholder="px" style="width:100%;background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.2);border-radius:6px;padding:6px 10px;font-size:.85rem"/></div>
+        <div><label style="font-size:.75rem;color:#4a7a9b">Distância real (cm)</label><input type="number" id="cal-cm" placeholder="cm" step="0.1" style="width:100%;background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.2);border-radius:6px;padding:6px 10px;font-size:.85rem"/></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <input type="file" id="inp-cal-manual" accept="image/*" style="display:none" onchange="runCalManual(this)"/>
+        <button class="btn btn-ghost" onclick="document.getElementById('inp-cal-manual').click()">📂 Selecionar imagem e calibrar</button>
+      </div>
+    </div>
+
+    <div id="res-calibration"></div>
+
+    <!-- Escala global salva -->
+    <div class="glass" style="padding:16px">
+      <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:6px">Escala atual aplicada às análises</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="cal-current" style="font-size:1.4rem;font-weight:800;color:var(--accent)">padrão</span>
+        <span style="font-size:.8rem;color:#4a7a9b">px/cm</span>
+        <button class="btn btn-danger" style="padding:6px 14px;font-size:.8rem" onclick="resetCalibration()">🔄 Resetar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LAUDOS PDF ── -->
+  <div id="page-reports" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">📄 Laudos PDF</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Gere relatórios profissionais em PDF de qualquer análise salva no histórico.</p>
+    <div class="glass" style="padding:20px;margin-bottom:16px">
+      <div style="font-size:.9rem;font-weight:600;margin-bottom:14px">⬇ Baixar laudo de análise anterior</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1">
+          <label style="font-size:.75rem;color:#4a7a9b;display:block;margin-bottom:4px">ID da análise</label>
+          <input type="number" id="pdf-analysis-id" placeholder="Ex: 3" min="1"
+            style="width:100%;background:#162850;color:#e2f0ff;border:1px solid rgba(0,229,160,.25);border-radius:8px;padding:8px 14px;font-size:.9rem"/>
+        </div>
+        <button class="btn btn-accent" onclick="downloadPdfById()">📄 Gerar e baixar PDF</button>
+      </div>
+    </div>
+    <div class="glass" style="padding:20px">
+      <div style="font-size:.9rem;color:#4a7a9b;margin-bottom:12px">Ou clique no ícone 📄 em qualquer análise no <strong style="color:#e2f0ff">Histórico</strong> para baixar diretamente.</div>
+      <div id="reports-recent"></div>
+    </div>
+  </div>
+
+  <!-- ── HISTÓRICO ── -->
+  <div id="page-history" class="page-content" style="display:none">
+    <h1 style="font-size:1.6rem;font-weight:800;margin-bottom:6px">🕓 Histórico de Análises</h1>
+    <p style="color:#4a7a9b;margin-bottom:24px">Todas as análises realizadas nesta sessão.</p>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="loadHistory()">🔄 Atualizar</button>
+      <button class="btn btn-ghost" onclick="loadHistory('morphometry')">📏 Morfometria</button>
+      <button class="btn btn-ghost" onclick="loadHistory('larvae')">🔬 Larvas</button>
+      <button class="btn btn-ghost" onclick="loadHistory('motility')">🎬 Motilidade</button>
+      <button class="btn btn-ghost" onclick="loadHistory('health')">❤️ Saúde</button>
+    </div>
+    <div class="glass" style="padding:20px">
+      <div id="history-table"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══ SCRIPTS ════════════════════════════════════════════════════════════════ -->
+<script>
+const API = '';  // mesmo host
+
+// ── Navegação ─────────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page-content').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  document.getElementById('page-' + name).style.display = 'block';
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'history')   loadHistory();
+}
+
+// ── Status OpenCV ─────────────────────────────────────────────────────────────
+async function loadCvStatus() {
+  try {
+    const r = await fetch(API + '/health');
+    const d = await r.json();
+    const cv = d.cv_info || {};
+    const el = document.getElementById('cv-status');
+    el.innerHTML = `
+      <div>🖥 OpenCV ${cv.opencv_version||'?'}</div>
+      <div style="color:${cv.yolo_available?'var(--accent)':'var(--warn)'}">
+        ${cv.yolo_available ? '✅ YOLOv8 ativo' : '⚡ Modo OpenCV puro'}
+      </div>`;
+  } catch(e) { console.warn('status err', e); }
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+let chartTypes = null, chartDays = null;
+
+async function loadDashboard() {
+  const r = await fetch(API + '/api/dashboard/stats');
+  const d = await r.json();
+  const by = d.by_type || {};
+  const cards = [
+    { label:'Total',       val: d.total || 0,              icon:'📊' },
+    { label:'Morfometria', val: by.morphometry||0,         icon:'📏' },
+    { label:'Larvas',      val: by.larvae||0,              icon:'🔬' },
+    { label:'Motilidade',  val: by.motility||0,            icon:'🎬' },
+    { label:'Saúde',       val: by.health||0,              icon:'❤️' },
+  ];
+  document.getElementById('dash-cards').innerHTML = cards.map(c=>
+    `<div class="metric-card"><div style="font-size:1.8rem">${c.icon}</div>
+     <div style="font-size:1.8rem;font-weight:800;color:var(--accent)">${c.val}</div>
+     <div style="font-size:.78rem;color:#4a7a9b;margin-top:4px">${c.label}</div></div>`
+  ).join('');
+
+  // Charts
+  const typeLabels = ['Morfometria','Larvas','Motilidade','Saúde'];
+  const typeVals   = [by.morphometry||0, by.larvae||0, by.motility||0, by.health||0];
+  const days7      = d.recent_7d || [];
+  const dayLabels  = days7.map(x=>x.date.slice(5));
+  const dayCounts  = days7.map(x=>x.count);
+
+  if (chartTypes) chartTypes.destroy();
+  chartTypes = new Chart(document.getElementById('chart-types'), {
+    type: 'doughnut',
+    data: { labels: typeLabels,
+            datasets:[{ data: typeVals,
+              backgroundColor:['#00e5a0','#00b4ff','#ffb300','#ff6b6b'],
+              borderWidth:0 }]},
+    options: { plugins:{ legend:{ labels:{ color:'#7a9abf' } } }, cutout:'60%' }
+  });
+
+  if (chartDays) chartDays.destroy();
+  chartDays = new Chart(document.getElementById('chart-days'), {
+    type: 'bar',
+    data: { labels: dayLabels,
+            datasets:[{ label:'Análises', data: dayCounts,
+              backgroundColor:'rgba(0,229,160,.5)', borderColor:'var(--accent)',
+              borderWidth:1, borderRadius:4 }]},
+    options: { scales:{ x:{ ticks:{color:'#7a9abf'}, grid:{color:'rgba(255,255,255,.04)'} },
+                         y:{ ticks:{color:'#7a9abf'}, grid:{color:'rgba(255,255,255,.04)'} }},
+               plugins:{ legend:{ labels:{ color:'#7a9abf' } } } }
+  });
+
+  // Recent list
+  const rh = await fetch(API + '/api/dashboard/history?limit=5');
+  const rd = await rh.json();
+  document.getElementById('dash-recent').innerHTML = rd.length ? rd.map(r=>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+       <div><span class="ok-badge">${typeIcon(r.type)} ${r.type}</span>
+            <span style="font-size:.85rem;margin-left:8px">${r.filename||'—'}</span></div>
+       <div style="font-size:.75rem;color:#4a7a9b">${r.created_at.slice(0,16).replace('T',' ')}</div>
+     </div>`).join('') : '<div style="color:#4a7a9b;font-size:.85rem">Nenhuma análise ainda.</div>';
+}
+
+function typeIcon(t){ return {morphometry:'📏',larvae:'🔬',motility:'🎬',health:'❤️'}[t]||'📋'; }
+
+// ── Helpers de UI ──────────────────────────────────────────────────────────────
+function showStatus(msg=null) {
+  const bar = document.getElementById('status-bar');
+  if (msg) {
+    document.getElementById('status-text').textContent = msg;
+    bar.style.display = 'flex';
+    bar.style.padding  = '12px 20px';
+    bar.style.marginBottom = '20px';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function setupDrop(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e=>{ e.preventDefault(); zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if(f){ handler({files:[f]}); }});
+}
+
+// ── MORFOMETRIA ───────────────────────────────────────────────────────────────
+setupDrop('drop-morphometry','inp-morphometry', runMorphometry);
+
+async function runMorphometry(input) {
+  const file = input.files[0]; if (!file) return;
+  showStatus('Analisando morfometria...');
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await fetch(API + '/api/morphometry/analyze', {method:'POST', body:fd});
+    const d = await r.json();
+    showStatus(null);
+    renderMorphometry(d);
+  } catch(e){ showStatus(null); alert('Erro: ' + e.message); }
+}
+
+function renderMorphometry(d) {
+  const el = document.getElementById('res-morphometry');
+  if (d.error) { el.innerHTML = errorCard(d.error); return; }
+  const s = d.stats || {};
+  el.innerHTML = `
+  <div class="glass" style="padding:24px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:1.1rem;font-weight:700">Resultado – ${d.filename||'imagem'}</div>
+        <div style="font-size:.8rem;color:#4a7a9b">${d.method||'opencv'} · ${d.processing_time_s}s · escala: ${d.scale_px_cm} px/cm</div>
+      </div>
+      <span class="ok-badge" style="font-size:.95rem">🦐 ${d.count} indivíduo${d.count===1?'':'s'}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+      ${metricBox('Comprimento médio', s.length_mean_cm + ' cm', '#00e5a0')}
+      ${metricBox('Desvio padrão', s.length_std_cm + ' cm', '#00b4ff')}
+      ${metricBox('Peso médio', s.weight_mean_g + ' g', '#ffb300')}
+      ${metricBox('Peso total', s.weight_total_g + ' g', '#ff6b6b')}
+      ${metricBox('Uniformidade CV', s.uniformity_cv + '%', s.uniformity_cv < 15 ? '#00e5a0' : s.uniformity_cv < 25 ? '#ffb300' : '#ff4444')}
+      ${metricBox('Maior', s.length_max_cm + ' cm', '#7a9abf')}
+      ${metricBox('Menor', s.length_min_cm + ' cm', '#7a9abf')}
+    </div>
+    ${d.annotated_image ? `<img src="${d.annotated_image}" style="width:100%;border-radius:10px;max-height:480px;object-fit:contain"/>` : ''}
+  </div>
+  ${d.individuals && d.individuals.length ? `
+  <div class="glass" style="padding:20px">
+    <div style="font-size:.9rem;color:#4a7a9b;margin-bottom:12px">📋 Dados individuais</div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>#</th><th>Comp. (cm)</th><th>Larg. (cm)</th><th>Área (cm²)</th><th>Peso (g)</th><th>Score Saúde</th><th>Alertas</th></tr></thead>
+      <tbody>${d.individuals.map(ind=>`
+        <tr>
+          <td>${ind.id}</td><td>${ind.length_cm}</td><td>${ind.width_cm}</td>
+          <td>${ind.area_cm2}</td><td>${ind.weight_g}</td>
+          <td><span style="color:${ind.health_score>=80?'var(--accent)':ind.health_score>=60?'var(--warn)':'var(--danger)'}">${ind.health_score}/100</span></td>
+          <td>${ind.alerts && ind.alerts.length ? ind.alerts.map(a=>`<span class="alert-badge">${a}</span>`).join('') : '<span class="ok-badge">✓ OK</span>'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>` : ''}`;
+}
+
+// ── LARVAS ────────────────────────────────────────────────────────────────────
+setupDrop('drop-larvae','inp-larvae', runLarvae);
+
+async function runLarvae(input) {
+  const file = input.files[0]; if (!file) return;
+  showStatus('Analisando larvas/PL...');
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await fetch(API + '/api/morphometry/larvae', {method:'POST', body:fd});
+    const d = await r.json();
+    showStatus(null);
+    renderLarvae(d);
+  } catch(e){ showStatus(null); alert('Erro: ' + e.message); }
+}
+
+function renderLarvae(d) {
+  const el = document.getElementById('res-larvae');
+  if (d.error) { el.innerHTML = errorCard(d.error); return; }
+  const qColor = {Excelente:'var(--accent)',Boa:'#00b4ff',Regular:'var(--warn)',Baixa:'var(--danger)'}[d.batch_quality]||'#7a9abf';
+  el.innerHTML = `
+  <div class="glass" style="padding:24px;margin-bottom:16px">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:16px">Resultado – ${d.filename||'imagem'}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+      ${metricBox('Contagem', d.count, '#00e5a0')}
+      ${metricBox('Tamanho médio', d.size_mean_mm + ' mm', '#00b4ff')}
+      ${metricBox('CV Uniformidade', d.size_cv_pct + '%', d.size_cv_pct<15?'var(--accent)':d.size_cv_pct<25?'var(--warn)':'var(--danger)')}
+      ${metricBox('Estágio', d.stage, '#ffb300')}
+      ${metricBox('Qualidade lote', d.batch_quality, qColor)}
+      ${metricBox('Tempo', d.processing_time_s + 's', '#7a9abf')}
+    </div>
+    ${d.annotated_image ? `<img src="${d.annotated_image}" style="width:100%;border-radius:10px;max-height:480px;object-fit:contain"/>` : ''}
+  </div>`;
+}
+
+// ── MOTILIDADE ────────────────────────────────────────────────────────────────
+setupDrop('drop-motility','inp-motility', runMotility);
+let chartMotility = null;
+
+async function runMotility(input) {
+  const file = input.files[0]; if (!file) return;
+  showStatus('Analisando vídeo (fluxo óptico)... pode demorar alguns segundos.');
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await fetch(API + '/api/motility/analyze', {method:'POST', body:fd});
+    const d = await r.json();
+    showStatus(null);
+    renderMotility(d);
+  } catch(e){ showStatus(null); alert('Erro: ' + e.message); }
+}
+
+function renderMotility(d) {
+  const el = document.getElementById('res-motility');
+  if (d.error) { el.innerHTML = errorCard(d.error); return; }
+  const si = d.swim_index || 0;
+  const siColor = si>=75?'var(--accent)':si>=50?'#00b4ff':si>=25?'var(--warn)':'var(--danger)';
+
+  el.innerHTML = `
+  <div class="glass" style="padding:24px;margin-bottom:16px">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:16px">Resultado – ${d.filename||'vídeo'}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+      <div class="metric-card">
+        <div class="score-circle" style="background:conic-gradient(${siColor} ${si*3.6}deg,rgba(255,255,255,.07) 0deg)">
+          <span style="color:${siColor}">${si}</span>
+          <span style="font-size:.6rem;color:#7a9abf">/ 100</span>
+        </div>
+        <div style="font-size:.78rem;color:#7a9abf">Índice Natatório</div>
+        <div style="color:${siColor};font-size:.8rem;font-weight:600;margin-top:4px">${d.swim_class||''}</div>
+      </div>
+      ${metricBox('Duração', d.duration_s + 's', '#7a9abf')}
+      ${metricBox('FPS', d.fps, '#7a9abf')}
+      ${metricBox('Frames analisados', d.frames_analyzed, '#00b4ff')}
+      ${metricBox('Atividade média', d.activity_mean, '#ffb300')}
+      ${metricBox('Atividade pico', d.activity_max, '#ff6b6b')}
+      ${metricBox('Tempo proc.', d.processing_time_s + 's', '#7a9abf')}
+    </div>
+
+    <!-- Gráfico timeline -->
+    ${d.timeline && d.timeline.length ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:8px">📈 Atividade ao longo do tempo</div>
+      <canvas id="chart-motility" height="120"></canvas>
+    </div>` : ''}
+
+    <!-- Frames preview -->
+    ${d.preview_frames && d.preview_frames.length ? `
+    <div>
+      <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:8px">🎞 Frames com fluxo óptico</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${d.preview_frames.map(f=>`<img src="${f}" style="height:100px;border-radius:8px;border:1px solid rgba(0,229,160,.2)"/>`).join('')}
+      </div>
+    </div>` : ''}
+  </div>`;
+
+  // Renderiza gráfico timeline
+  if (d.timeline && d.timeline.length) {
+    if (chartMotility) chartMotility.destroy();
+    chartMotility = new Chart(document.getElementById('chart-motility'), {
+      type:'line',
+      data:{
+        labels: d.timeline.map(p=>p.t_sec+'s'),
+        datasets:[{ label:'Atividade (fluxo)', data: d.timeline.map(p=>p.activity),
+          borderColor:'var(--accent)', backgroundColor:'rgba(0,229,160,.08)',
+          borderWidth:2, fill:true, tension:0.4, pointRadius:2 }]
+      },
+      options:{
+        scales:{ x:{ticks:{color:'#7a9abf'},grid:{color:'rgba(255,255,255,.04)'},maxTicksLimit:10},
+                  y:{ticks:{color:'#7a9abf'},grid:{color:'rgba(255,255,255,.04)'}} },
+        plugins:{ legend:{labels:{color:'#7a9abf'}} }
+      }
+    });
+  }
+}
+
+// ── SAÚDE ─────────────────────────────────────────────────────────────────────
+setupDrop('drop-health','inp-health', runHealth);
+
+async function runHealth(input) {
+  const file = input.files[0]; if (!file) return;
+  showStatus('Avaliando saúde...');
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await fetch(API + '/api/health/analyze', {method:'POST', body:fd});
+    const d = await r.json();
+    showStatus(null);
+    renderHealth(d);
+  } catch(e){ showStatus(null); alert('Erro: ' + e.message); }
+}
+
+function renderHealth(d) {
+  const el = document.getElementById('res-health');
+  if (d.error) { el.innerHTML = errorCard(d.error); return; }
+  const sc = d.overall_score || 0;
+  const scColor = sc>=80?'var(--accent)':sc>=60?'var(--warn)':'var(--danger)';
+  const alerts  = d.alert_summary || {};
+  el.innerHTML = `
+  <div class="glass" style="padding:24px;margin-bottom:16px">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:16px">Resultado – ${d.filename||'imagem'}</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px">
+      <div class="metric-card" style="flex:0 0 160px">
+        <div class="score-circle" style="background:conic-gradient(${scColor} ${sc*3.6}deg,rgba(255,255,255,.07) 0deg)">
+          <span style="color:${scColor}">${sc}</span>
+          <span style="font-size:.6rem;color:#7a9abf">/ 100</span>
+        </div>
+        <div style="font-size:.78rem;color:#7a9abf">Score Saúde</div>
+        <div style="color:${scColor};font-weight:600;font-size:.85rem;margin-top:4px">${d.status||''}</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:.85rem;color:#4a7a9b;margin-bottom:8px">Alertas detectados</div>
+        ${Object.keys(alerts).length ?
+          Object.entries(alerts).map(([a,c])=>
+            `<div class="alert-badge" style="margin:4px;font-size:.82rem">${a} (${c}x)</div>`).join('') :
+          '<span class="ok-badge">✅ Nenhum alerta – camarões saudáveis</span>'}
+        <div style="margin-top:12px;font-size:.8rem;color:#4a7a9b">
+          <strong style="color:#e2f0ff">Doenças monitoradas:</strong> WSSV (manchas brancas), Black Gill (brânquias escurecidas), Vibriose (coloração avermelhada), Necrose muscular (opacidade).
+        </div>
+      </div>
+    </div>
+    ${d.annotated_image ? `<img src="${d.annotated_image}" style="width:100%;border-radius:10px;max-height:480px;object-fit:contain"/>` : ''}
+  </div>
+  ${d.individuals && d.individuals.length ? `
+  <div class="glass" style="padding:20px">
+    <div style="font-size:.9rem;color:#4a7a9b;margin-bottom:12px">📋 Saúde individual</div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>#</th><th>Comp. (cm)</th><th>Score</th><th>HSV médio</th><th>Textura Var.</th><th>Alertas</th></tr></thead>
+      <tbody>${d.individuals.map(ind=>`
+        <tr>
+          <td>${ind.id}</td><td>${ind.length_cm}</td>
+          <td style="color:${ind.health_score>=80?'var(--accent)':ind.health_score>=60?'var(--warn)':'var(--danger)'}">${ind.health_score}/100</td>
+          <td style="font-size:.78rem">${(ind.hsv_mean||[]).join(', ')}</td>
+          <td>${ind.texture_var}</td>
+          <td>${ind.alerts&&ind.alerts.length?ind.alerts.map(a=>`<span class="alert-badge">${a}</span>`).join(''):'<span class="ok-badge">✓ OK</span>'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>` : ''}`;
+}
+
+// ── HISTÓRICO ────────────────────────────────────────────────────────────────
+async function loadHistory(type=null) {
+  const url = API + '/api/dashboard/history?limit=100' + (type ? '&type='+type : '');
+  const r = await fetch(url);
+  const d = await r.json();
+  const el = document.getElementById('history-table');
+  if (!d.length) { el.innerHTML = '<div style="color:#4a7a9b">Nenhuma análise no histórico.</div>'; return; }
+  el.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>ID</th><th>Data</th><th>Tipo</th><th>Arquivo</th><th>Resumo</th><th>Ação</th></tr></thead>
+    <tbody>${d.map(row=>{
+      const s = row.summary || {};
+      let resumo = '';
+      if (s.count !== undefined)       resumo += `${s.count} indiv. `;
+      if (s.stats)                     resumo += `${s.stats.length_mean_cm||''}cm `;
+      if (s.swim_index !== undefined)  resumo += `swim ${s.swim_index} `;
+      if (s.overall_score !== undefined) resumo += `score ${s.overall_score} `;
+      if (s.stage)                     resumo += s.stage;
+      return `<tr>
+        <td>${row.id}</td>
+        <td style="font-size:.78rem">${row.created_at.slice(0,16).replace('T',' ')}</td>
+        <td><span class="ok-badge">${typeIcon(row.type)} ${row.type}</span></td>
+        <td style="font-size:.8rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">${row.filename||'—'}</td>
+        <td style="font-size:.78rem;color:#7a9abf">${resumo||JSON.stringify(s).slice(0,60)}</td>
+        <td style="display:flex;gap:4px">
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:.75rem" onclick="downloadPdf(${row.id})">📄</button>
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:.75rem" onclick="deleteEntry(${row.id})">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Remover análise #' + id + '?')) return;
+  await fetch(API + '/api/dashboard/analysis/' + id, {method:'DELETE'});
+  loadHistory();
+}
+
+async function downloadPdf(id) {
+  showStatus('Gerando laudo PDF...');
+  try {
+    const r = await fetch(API + '/api/reports/analysis/' + id);
+    if (!r.ok) { alert('Erro ao gerar PDF: ' + await r.text()); showStatus(null); return; }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `shrimpscan_${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e){ alert('Erro: ' + e.message); }
+  showStatus(null);
+}
+
+async function downloadPdfById() {
+  const id = document.getElementById('pdf-analysis-id').value;
+  if (!id) { alert('Informe o ID da análise.'); return; }
+  await downloadPdf(parseInt(id));
+}
+
+// ── Calibração ───────────────────────────────────────────────────────────────
+let _savedScale = null;
+
+document.getElementById('cal-ref-type').addEventListener('change', function(){
+  document.getElementById('cal-custom-mm').style.display = this.value==='custom'?'block':'none';
+});
+setupDrop('drop-calibration','inp-calibration', runCalibration);
+
+async function runCalibration(input) {
+  const file = input.files[0]; if(!file) return;
+  const refType = document.getElementById('cal-ref-type').value;
+  const customMm = document.getElementById('cal-custom-mm').value;
+  showStatus('Detectando referência de escala...');
+  const fd = new FormData();
+  fd.append('file', file);
+  let url = API + '/api/calibration/auto?reference_type=' + encodeURIComponent(refType);
+  if (refType==='custom' && customMm) url += '&custom_mm=' + customMm;
+  try {
+    const r = await fetch(url, {method:'POST', body:fd});
+    const d = await r.json();
+    showStatus(null);
+    renderCalibration(d);
+  } catch(e){ showStatus(null); alert('Erro: '+e.message); }
+}
+
+async function runCalManual(input) {
+  const file = input.files[0]; if(!file) return;
+  const x1=document.getElementById('cal-x1').value, y1=document.getElementById('cal-y1').value;
+  const x2=document.getElementById('cal-x2').value, y2=document.getElementById('cal-y2').value;
+  const cm=document.getElementById('cal-cm').value;
+  if(!x1||!y1||!x2||!y2||!cm){alert('Preencha todos os campos de calibração manual.');return;}
+  showStatus('Calibrando manualmente...');
+  const fd = new FormData(); fd.append('file', file);
+  const url = `${API}/api/calibration/manual?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}&known_cm=${cm}`;
+  try {
+    const r = await fetch(url, {method:'POST', body:fd});
+    const d = await r.json();
+    showStatus(null);
+    renderCalibration(d);
+  } catch(e){ showStatus(null); alert('Erro: '+e.message); }
+}
+
+function renderCalibration(d) {
+  const el = document.getElementById('res-calibration');
+  if(d.error){el.innerHTML=errorCard(d.error);return;}
+  _savedScale = d.scale_px_cm;
+  document.getElementById('cal-current').textContent = _savedScale;
+  el.innerHTML = `
+  <div class="glass" style="padding:24px;margin-bottom:16px">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:16px">✅ Calibração concluída</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px">
+      ${metricBox('Escala (px/cm)', d.scale_px_cm, '#00e5a0')}
+      ${metricBox('Referência', d.reference_type||'—', '#00b4ff')}
+      ${metricBox('Ref. real (mm)', d.reference_mm||'—', '#ffb300')}
+      ${metricBox('Método', d.method||'—', '#7a9abf')}
+    </div>
+    <div style="font-size:.8rem;color:#4a7a9b;margin-bottom:10px">
+      ✔ Esta escala será usada automaticamente nas próximas análises de morfometria.
+    </div>
+    ${d.annotated_image?`<img src="${d.annotated_image}" style="width:100%;border-radius:10px;max-height:380px;object-fit:contain"/>`:''}
+  </div>`;
+}
+
+function resetCalibration(){
+  _savedScale = null;
+  document.getElementById('cal-current').textContent = 'padrão';
+  document.getElementById('res-calibration').innerHTML='';
+}
+
+// ── Laudos PDF ───────────────────────────────────────────────────────────────
+async function loadReportsList(){
+  const r = await fetch(API+'/api/dashboard/history?limit=20');
+  const d = await r.json();
+  const el = document.getElementById('reports-recent');
+  if(!d.length){el.innerHTML='<div style="color:#4a7a9b">Sem análises salvas ainda.</div>';return;}
+  el.innerHTML = d.map(row=>{
+    const s=row.summary||{};
+    let resumo='';
+    if(s.count!==undefined) resumo+=`${s.count} indiv. `;
+    if(s.stats) resumo+=`${s.stats.length_mean_cm||''}cm `;
+    if(s.swim_index!==undefined) resumo+=`swim ${s.swim_index} `;
+    if(s.overall_score!==undefined) resumo+=`score ${s.overall_score} `;
+    if(s.stage) resumo+=s.stage;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+      <div>
+        <span class="ok-badge">${typeIcon(row.type)} ${row.type}</span>
+        <span style="font-size:.82rem;margin-left:8px">${row.filename||'—'}</span>
+        <span style="font-size:.75rem;color:#4a7a9b;margin-left:6px">${row.created_at.slice(0,16).replace('T',' ')}</span>
+      </div>
+      <button class="btn btn-accent" style="padding:5px 14px;font-size:.8rem" onclick="downloadPdf(${row.id})">📄 PDF</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Exportar CSV ──────────────────────────────────────────────────────────────
+function exportCSV() {
+  const a = document.createElement('a');
+  a.href = API + '/api/dashboard/export/csv';
+  a.download = 'shrimpscan_export.csv';
+  a.click();
+}
+
+// ── Helpers de renderização ───────────────────────────────────────────────────
+function metricBox(label, val, color='var(--accent)') {
+  return `<div class="metric-card">
+    <div style="font-size:1.4rem;font-weight:800;color:${color}">${val}</div>
+    <div style="font-size:.75rem;color:#4a7a9b;margin-top:4px">${label}</div>
+  </div>`;
+}
+
+function errorCard(msg) {
+  return `<div class="glass" style="padding:20px;border-color:rgba(255,68,68,.3)">
+    <div style="color:var(--danger);font-weight:600">❌ Erro</div>
+    <div style="color:#7a9abf;margin-top:4px">${msg}</div>
+  </div>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadCvStatus();
+loadDashboard();
+
+// Sobrescreve showPage para carregar laudos
+const _origShowPage = showPage;
+showPage = function(name) {
+  _origShowPage(name);
+  if (name === 'reports') loadReportsList();
+};
+</script>
+</body>
+</html>

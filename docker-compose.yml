@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  shrimpscan:
+    build: .
+    image: shrimpscan:latest
+    container_name: shrimpscan
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persiste banco de dados e uploads fora do container
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    environment:
+      - PORT=8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Opcional: Nginx como proxy reverso (descomente para produção)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: shrimpscan-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  #   depends_on:
+  #     - shrimpscan
+  #   restart: unless-stopped
