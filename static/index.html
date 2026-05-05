@@ -467,16 +467,29 @@ function renderLarvae(d) {
   const el = document.getElementById('res-larvae');
   if (d.error) { el.innerHTML = errorCard(d.error); return; }
   const qColor = {Excelente:'var(--accent)',Boa:'#00b4ff',Regular:'var(--warn)',Baixa:'var(--danger)'}[d.batch_quality]||'#7a9abf';
+  const minCount = d.count_range?.min;
+  const maxCount = d.count_range?.max;
+  const hasRange = Number.isFinite(minCount) && Number.isFinite(maxCount);
+  const spread = hasRange ? Math.max(0, maxCount - minCount) : 0;
+  const spreadPct = d.count > 0 ? (spread / d.count) * 100 : 100;
+  const reliability = spreadPct <= 8 ? 'Alta' : spreadPct <= 15 ? 'Média' : 'Baixa';
+  const reliabilityColor = reliability === 'Alta' ? 'var(--accent)' : reliability === 'Média' ? 'var(--warn)' : 'var(--danger)';
   el.innerHTML = `
   <div class="glass" style="padding:24px;margin-bottom:16px">
     <div style="font-size:1.1rem;font-weight:700;margin-bottom:16px">Resultado – ${d.filename||'imagem'}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
       ${metricBox('Contagem', d.count, '#00e5a0')}
+      ${metricBox('Faixa', hasRange ? `${minCount}–${maxCount}` : '—', '#7a9abf')}
+      ${metricBox('Confiabilidade', reliability, reliabilityColor)}
       ${metricBox('Tamanho médio', d.size_mean_mm + ' mm', '#00b4ff')}
       ${metricBox('CV Uniformidade', d.size_cv_pct + '%', d.size_cv_pct<15?'var(--accent)':d.size_cv_pct<25?'var(--warn)':'var(--danger)')}
       ${metricBox('Estágio', d.stage, '#ffb300')}
       ${metricBox('Qualidade lote', d.batch_quality, qColor)}
       ${metricBox('Tempo', d.processing_time_s + 's', '#7a9abf')}
+    </div>
+    <div style="font-size:.82rem;color:#7a9abf;margin-top:-8px;margin-bottom:12px">
+      Método: <span style="color:#e2f0ff">${d.method || '—'}</span>
+      ${hasRange ? ` · Variação: ${spread} (${spreadPct.toFixed(1)}%)` : ''}
     </div>
     ${d.annotated_image ? `<img src="${d.annotated_image}" style="width:100%;border-radius:10px;max-height:480px;object-fit:contain"/>` : ''}
   </div>`;

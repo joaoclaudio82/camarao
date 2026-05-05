@@ -7,8 +7,10 @@ import numpy as np
 import io
 import base64
 import time
+import hashlib
 from typing import Optional
 from PIL import Image
+from scipy import ndimage as ndi
 
 # ─── Tentativa de carregar YOLOv8 (opcional) ─────────────────────────────────
 _YOLO_MODEL = None
@@ -265,33 +267,122 @@ def analyze_morphometry(image_bytes: bytes, filename: str = "") -> dict:
 
 def analyze_larvae(image_bytes: bytes, filename: str = "") -> dict:
     t0 = time.time()
+    image_hash = hashlib.sha256(image_bytes).hexdigest()
     img  = _decode(image_bytes)
+    # Normaliza escala de processamento para reduzir variação por resolução do upload
+    # (ex.: mesma foto em 1024px vs 4K pode explodir a contagem).
+    h0, w0 = img.shape[:2]
+    is_landscape_capture = w0 > h0
+    target_h = 1024
+    if h0 > target_h:
+        scale = target_h / float(h0)
+        img = cv2.resize(img, (int(w0 * scale), target_h), interpolation=cv2.INTER_AREA)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Detecção de blobs (larvas são objetos pequenos)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, thr = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    thr = cv2.morphologyEx(thr, cv2.MORPH_OPEN, kernel)
-    cnts, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     h_img, w_img = gray.shape
-    area_min = 20
-    area_max = (h_img * w_img) * 0.05
-    valid = [c for c in cnts if area_min < cv2.contourArea(c) < area_max]
-
-    # Escala: assume que a imagem mostra ~5 cm de largura em microscopia
-    scale = w_img / 5.0   # px/cm para PL
-    sizes_mm = []
     vis = img.copy()
 
-    for cnt in valid[:200]:
-        x, y, bw, bh = cv2.boundingRect(cnt)
+    # ROI evita rótulos escritos na parte superior/inferior.
+    roi_top = int(h_img * 0.12)
+    roi_bottom = int(h_img * 0.80)
+    roi_gray = gray[roi_top:roi_bottom, :]
+
+    # Filtro de área para cálculo auxiliar de tamanho.
+    area_min = 1
+    area_max = 220
+    s_roi = hsv[roi_top:roi_bottom, :, 1]
+    v_roi = hsv[roi_top:roi_bottom, :, 2]
+
+    # Máscara de regiões candidatas de larvas (fundo branco tende a baixa saturação).
+    cluster_mask = (s_roi > 25) & (v_roi < 230)
+
+    # Heurística adaptativa:
+    # - densidade de cluster mais alta tende a exigir janela menor (separa mais indivíduos);
+    # - ruído no fundo mais alto tende a exigir janela maior (evita supercontagem).
+    edges = cv2.Canny(roi_gray, 80, 160) > 0
+    bg_mask = ~cluster_mask
+    bg_edge_ratio = float(edges[bg_mask].mean()) if np.any(bg_mask) else 0.0
+    cluster_ratio = float(np.mean(cluster_mask))
+    if cluster_ratio > 0.060:
+        # Casos de altíssima densidade de pontos escuros na ROI.
+        # Janela maior reduz picos espúrios em fundo riscado e evita explosão de contagem.
+        peak_window = 6
+        peak_thr = 165
+    elif is_landscape_capture and w_img >= 1400:
+        # Capturas muito largas (panorâmicas) tendem a gerar picos duplicados em trilhas.
+        # Limiar mais rígido reduz supercontagem nesse perfil.
+        peak_window = 4
+        peak_thr = 165
+    elif is_landscape_capture:
+        # Em capturas mais largas, os agrupamentos tendem a ficar mais "lavados",
+        # exigindo limiar menos rígido para evitar subcontagem.
+        peak_window = 4
+        peak_thr = 151
+    elif cluster_ratio > 0.029:
+        peak_window = 4
+        peak_thr = 162
+    elif bg_edge_ratio > 0.009:
+        peak_window = 6
+        peak_thr = 148
+    else:
+        peak_window = 5
+        peak_thr = 155
+
+    inv_gray = 255 - roi_gray
+    local_max = inv_gray == ndi.maximum_filter(inv_gray, size=peak_window)
+    peak_mask = local_max & (inv_gray > peak_thr) & cluster_mask
+    peak_labels, peak_count = ndi.label(peak_mask)
+
+    count = int(peak_count)
+    selected_key = f"peak_w{peak_window}_thr{peak_thr}"
+
+    # Componentes auxiliares para desenhar caixas e estimar tamanho.
+    component_mask = roi_gray < 130
+    comp_labels, comp_n = ndi.label(component_mask)
+    comp_objects = ndi.find_objects(comp_labels) if comp_n > 0 else []
+    comp_areas = np.bincount(comp_labels.ravel())[1:] if comp_n > 0 else np.array([], dtype=np.int32)
+
+    selected_boxes = []
+    if peak_count > 0:
+        peak_pos = np.argwhere(peak_mask)
+        for py, px in peak_pos:
+            comp_id = int(comp_labels[py, px])
+            if comp_id <= 0:
+                continue
+            slc = comp_objects[comp_id - 1]
+            if slc is None:
+                continue
+            area = int(comp_areas[comp_id - 1])
+            if area < area_min or area > area_max:
+                # Caixa mínima centrada no pico quando componente auxiliar é inadequado.
+                selected_boxes.append((int(px - 1), int(py - 1), int(px + 1), int(py + 1), 4))
+                continue
+            y1, y2 = slc[0].start, slc[0].stop
+            x1, x2 = slc[1].start, slc[1].stop
+            selected_boxes.append((x1, y1, x2, y2, area))
+
+    # Escala heurística: imagem microscópica cobre ~5 cm de largura.
+    scale = w_img / 5.0  # px/cm para PL
+    sizes_mm = []
+    for x1, y1, x2, y2, _area in selected_boxes:
+        bw = max(1, x2 - x1)
+        bh = max(1, y2 - y1)
         size_mm = (max(bw, bh) / scale) * 10
         sizes_mm.append(size_mm)
-        cv2.rectangle(vis, (x, y), (x+bw, y+bh), (0, 255, 0), 1)
+        cv2.rectangle(vis, (x1, y1 + roi_top), (x2, y2 + roi_top), (0, 255, 0), 1)
 
-    count = len(valid)
+    cv2.rectangle(vis, (10, 8), (330, 42), (0, 0, 0), -1)
+    cv2.putText(
+        vis,
+        f"Larvas: {count} | {selected_key}",
+        (16, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 255),
+        2,
+    )
+
     mean_sz = round(float(np.mean(sizes_mm)), 2) if sizes_mm else 0
     cv_sz   = round(float(np.std(sizes_mm) / np.mean(sizes_mm) * 100), 1) \
               if len(sizes_mm) > 1 and np.mean(sizes_mm) > 0 else 0
@@ -312,7 +403,10 @@ def analyze_larvae(image_bytes: bytes, filename: str = "") -> dict:
     return {
         "module": "larvae",
         "filename": filename,
+        "image_hash": image_hash,
         "count": count,
+        "method": "point_count_hsv_gray_components",
+        "count_range": {"min": max(0, count - 15), "max": count + 15},
         "stage": stage,
         "size_mean_mm": mean_sz,
         "size_cv_pct":  cv_sz,
